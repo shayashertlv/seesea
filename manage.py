@@ -1,0 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()                # picks up variables from .env if present
+
+from web import create_app
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(debug=True)

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: seesea
+      POSTGRES_PASSWORD: seesea
+      POSTGRES_DB: seesea
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6380:6379"

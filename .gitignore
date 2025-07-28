@@ -1,0 +1,18 @@
+# Ignore Python virtual env
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore big media files
+*.mp4
+*.avi
+
+# Ignore folders
+runs/
+uploads/
+personal_ for_ testing/
+
+# System/IDE stuff
+.idea/
+.DS_Store
+.env

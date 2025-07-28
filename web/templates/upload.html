@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Upload{% endblock %}
+
+{% block body %}
+<h2>Upload images</h2>
+<form method="POST" enctype="multipart/form-data">
+  {{ form.hidden_tag() }}
+  <div class="mb-3">{{ form.images(class="form-control", multiple=true) }}</div>
+  {{ form.submit(class="btn btn-primary") }}
+</form>
+
+{% if files %}
+<hr>
+<h4>Your existing files</h4>
+<ul>
+  {% for f in files %}
+    <li>{{ f }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
