@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Your Captured Surfing Moments 🏄‍♂️</h2>
+
+  {% if frames %}
+    <div style="display: flex; flex-wrap: wrap;">
+      {% for frame in frames %}
+        <div style="margin: 10px; text-align: center;">
+          <a href="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}" target="_blank">
+            <img src="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}"
+               alt="Frame {{ loop.index }}"
+               width="250"
+               style="border: 1px solid #ccc; border-radius: 8px;">
+
+          </a>
+          <p>Conf: {{ '%.2f' % frame.score }}</p>
+          <p>{{ frame.frame_path.split('/')[-1] }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>No frames captured yet.</p>
+  {% endif %}
+{% endblock %}

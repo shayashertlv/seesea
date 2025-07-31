@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Upload Surfer Photos</h2>
+  <form method="POST" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    {{ form.face_image.label }} {{ form.face_image() }}<br><br>
+    {{ form.board_image.label }} {{ form.board_image() }}<br><br>
+    {{ form.submit() }}
+  </form>
+{% endblock %}
