@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <h2 class="mt-4 mb-4">Your Surfer Profile</h2>
+  
+  <div class="row">
+    <div class="col-md-4">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>Account Information</h5>
+        </div>
+        <div class="card-body">
+          <p><strong>Username:</strong> {{ current_user.username }}</p>
+          <p><strong>Member Since:</strong> {{ profile.created_at.strftime('%B %d, %Y') if profile else 'N/A' }}</p>
+          <p><strong>Last Updated:</strong> {{ profile.updated_at.strftime('%B %d, %Y') if profile else 'N/A' }}</p>
+          
+          {% if not profile %}
+          <div class="alert alert-warning">
+            <strong>Your profile is incomplete!</strong> Please upload reference images to help us identify you in surf photos.
+          </div>
+          <a href="{{ url_for('upload.upload_page') }}" class="btn btn-primary">Upload Reference Images</a>
+          {% else %}
+          <a href="{{ url_for('upload.upload_page') }}" class="btn btn-outline-primary">Update Reference Images</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-8">
+      {% if profile %}
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>Your Reference Images</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="card mb-3">
+                <div class="card-header bg-light">Face Image (Front)</div>
+                <div class="card-body p-0">
+                  <img src="{{ profile.face_image_path.replace('app/', '/') }}" class="img-fluid" alt="Face Image">
+                </div>
+              </div>
+            </div>
+            
+            {% if profile.face_side_image_path %}
+            <div class="col-md-6">
+              <div class="card mb-3">
+                <div class="card-header bg-light">Face Image (Side)</div>
+                <div class="card-body p-0">
+                  <img src="{{ profile.face_side_image_path.replace('app/', '/') }}" class="img-fluid" alt="Side Face Image">
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            
+            <div class="col-md-6">
+              <div class="card mb-3">
+                <div class="card-header bg-light">Surfboard</div>
+                <div class="card-body p-0">
+                  <img src="{{ profile.board_image_path.replace('app/', '/') }}" class="img-fluid" alt="Surfboard Image">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {% if profile.wetsuit_description %}
+          <div class="card mb-3">
+            <div class="card-header bg-light">Wetsuit Description</div>
+            <div class="card-body">
+              <p>{{ profile.wetsuit_description }}</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>Your Surf Photos</h5>
+        </div>
+        <div class="card-body">
+          {% if frames %}
+            <p>You have {{ frames|length }} surf photos in your gallery.</p>
+            <a href="{{ url_for('upload.gallery') }}" class="btn btn-info">View Gallery</a>
+          {% else %}
+            <p>No surf photos have been captured for you yet.</p>
+            <p class="text-muted">Once you're identified in surf videos, your photos will appear here.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

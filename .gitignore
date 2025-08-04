@@ -11,6 +11,11 @@ __pycache__/
 runs/
 uploads/
 personal_ for_ testing/
+app/static/frames/
+app/static/videos/
+
+# Ignore database files
+instance/seesea.sqlite
 
 # System/IDE stuff
 .idea/

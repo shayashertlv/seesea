@@ -4,11 +4,15 @@ from ultralytics import YOLO
 from datetime import datetime
 from app.database import SessionLocal
 from app.models import SurferFrame
+from dotenv import load_dotenv
 
-VIDEO_PATH = "app/static/sample_surf.mp4"  # 🔁 <-- Confirm this video exists
-WEIGHTS_PATH = "weights/surf_polish640_best.pt"
-SAVE_DIR = os.path.join("app", "static", "captures")
-CONFIDENCE_THRESHOLD = 0.3
+# Load environment variables
+load_dotenv()
+
+VIDEO_PATH = os.getenv("VIDEO_PATH", "app/static/uploads/sample_surf.mp4")
+WEIGHTS_PATH = os.getenv("YOLO_WEIGHTS_PATH", "weights/surf_polish640_best.pt")
+SAVE_DIR = os.getenv("CAPTURES_FOLDER", os.path.join("app", "static", "captures"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.3"))
 
 def detect_and_capture():
     print("[✅] Starting detection...")
@@ -51,14 +55,21 @@ def detect_and_capture():
             label = results.names[int(box.cls[0])]
 
             filename = f"frame_{frame_count}_{i}.jpg"
-            raw_path = os.path.join(SAVE_DIR, filename)              # Save with OS native path
-            frame_path = raw_path.replace("\\", "/")                 # Store for web/flask
+            # Create full path for file operations
+            raw_path_full = os.path.join(SAVE_DIR, filename)              # Save with OS native path
+            
+            # Create relative path for database storage (without app/static/ prefix)
+            captures_dir_relative = "captures"  # Relative path for database
+            raw_path_relative = os.path.join(captures_dir_relative, filename)
+            frame_path = raw_path_relative.replace("\\", "/")        # Store for web/flask
 
             crop = frame[int(y1):int(y2), int(x1):int(x2)]
-            cv2.imwrite(raw_path, crop)
+            cv2.imwrite(raw_path_full, crop)
 
+            # Store the frame without assigning to a user yet
+            # The matching process will later assign the correct user_id
             new_frame = SurferFrame(
-                user_id=1,  # ❗ Replace with actual user ID later
+                user_id=0,  # Temporary placeholder, will be updated by matching process
                 frame_path=frame_path,
                 x1=x1,
                 y1=y1,
