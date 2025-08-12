@@ -1,168 +1,87 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
-  <div class="row mb-4">
-    <div class="col">
-      <h2 class="mt-4 mb-3">Your Captured Surfing Moments 🏄‍♂️</h2>
-    </div>
-  </div>
-  
-  <!-- Filters and Sorting -->
-  <div class="row mb-4">
-    <div class="col-md-8">
-      <div class="card">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Filter & Sort</h5>
-          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="true" aria-controls="filterCollapse">
-            <i class="fas fa-filter"></i> Toggle Filters
-          </button>
-        </div>
-        <div class="collapse show" id="filterCollapse">
-          <div class="card-body">
-            <form method="GET" class="row g-3">
-              <!-- Keep current page if set -->
-              {% if pagination and pagination.page > 1 %}
-                <input type="hidden" name="page" value="1">
-              {% endif %}
-              
-              <div class="col-md-6 col-lg-3">
-                <label class="form-label">Sort By</label>
-                <select name="sort" class="form-select">
-                  <option value="date_desc" {% if sort_option == 'date_desc' %}selected{% endif %}>Newest First</option>
-                  <option value="date_asc" {% if sort_option == 'date_asc' %}selected{% endif %}>Oldest First</option>
-                  <option value="score_desc" {% if sort_option == 'score_desc' %}selected{% endif %}>Highest Score First</option>
-                  <option value="score_asc" {% if sort_option == 'score_asc' %}selected{% endif %}>Lowest Score First</option>
-                </select>
-              </div>
-              
-              <div class="col-md-6 col-lg-3">
-                <label class="form-label">Min. Score</label>
-                <select name="min_score" class="form-select">
-                  <option value="0" {% if min_score == 0 %}selected{% endif %}>All Scores</option>
-                  <option value="0.5" {% if min_score == 0.5 %}selected{% endif %}>0.5+</option>
-                  <option value="0.7" {% if min_score == 0.7 %}selected{% endif %}>0.7+</option>
-                  <option value="0.9" {% if min_score == 0.9 %}selected{% endif %}>0.9+</option>
-                </select>
-              </div>
-              
-              <div class="col-md-6 col-lg-3">
-                <label class="form-label">Date Range</label>
-                <select name="date_range" class="form-select">
-                  <option value="all" {% if date_range == 'all' %}selected{% endif %}>All Time</option>
-                  <option value="today" {% if date_range == 'today' %}selected{% endif %}>Today</option>
-                  <option value="week" {% if date_range == 'week' %}selected{% endif %}>This Week</option>
-                  <option value="month" {% if date_range == 'month' %}selected{% endif %}>This Month</option>
-                </select>
-              </div>
-              
-              <div class="col-md-6 col-lg-3">
-                <label class="form-label">View</label>
-                <select name="view" class="form-select">
-                  <option value="grid" {% if view_option == 'grid' %}selected{% endif %}>Grid View</option>
-                  <option value="list" {% if view_option == 'list' %}selected{% endif %}>List View</option>
-                </select>
-              </div>
-              
-              <div class="col-12 text-center mt-3">
-                <button type="submit" class="btn btn-primary">Apply Filters</button>
-                <a href="{{ url_for('upload.gallery') }}" class="btn btn-outline-secondary ms-2">Reset</a>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-header bg-info text-white">
-          <h5 class="mb-0">Gallery Stats</h5>
-        </div>
-        <div class="card-body">
-          <p><strong>Total Photos:</strong> {{ pagination.total_count }}</p>
-          <p><strong>Filtered Photos:</strong> {{ frames|length }} of {{ pagination.total_count }}</p>
-          <p><strong>Pages:</strong> {{ pagination.page }} of {{ pagination.total_pages }}</p>
-          <a href="{{ url_for('upload.video_upload') }}" class="btn btn-primary">Upload More Videos</a>
-        </div>
-      </div>
-    </div>
-  </div>
+<h2 class="mb-3">My Gallery</h2>
 
-  <!-- Gallery -->
-  {% if frames %}
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
+<form method="get" action="{{ url_for('upload.gallery') }}" class="card mb-3 p-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-3">
+      <label class="form-label">Sort By</label>
+      <select name="sort" class="form-select">
+        <option value="date_desc" {% if sort_option=='date_desc' %}selected{% endif %}>Newest First</option>
+        <option value="date_asc" {% if sort_option=='date_asc' %}selected{% endif %}>Oldest First</option>
+        <option value="score_desc" {% if sort_option=='score_desc' %}selected{% endif %}>Score: High to Low</option>
+        <option value="score_asc" {% if sort_option=='score_asc' %}selected{% endif %}>Score: Low to High</option>
+      </select>
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label">Minimum Score</label>
+      <input type="number" step="0.01" min="0" max="1" name="min_score" value="{{ min_score }}" class="form-control" />
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label">Date Range</label>
+      <select name="date_range" class="form-select">
+        <option value="all" {% if date_range=='all' %}selected{% endif %}>All Time</option>
+        <option value="today" {% if date_range=='today' %}selected{% endif %}>Today</option>
+        <option value="week" {% if date_range=='week' %}selected{% endif %}>Last 7 Days</option>
+        <option value="month" {% if date_range=='month' %}selected{% endif %}>Last 30 Days</option>
+      </select>
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label">View</label>
+      <select name="view" class="form-select">
+        <option value="grid" {% if view_option=='grid' %}selected{% endif %}>Grid</option>
+        <option value="list" {% if view_option=='list' %}selected{% endif %}>List</option>
+      </select>
+    </div>
+  </div>
+  <div class="mt-3">
+    <button class="btn btn-primary">Apply</button>
+  </div>
+</form>
+
+{% if frames %}
+  {% if view_option == 'list' %}
+    <div class="list-group mb-3">
       {% for frame in frames %}
-        <div class="col">
-          <div class="card h-100">
-            <a href="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}" target="_blank">
-              <img src="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}"
-                 class="card-img-top"
-                 alt="Surf Frame {{ loop.index }}">
-            </a>
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center">
-                <span class="badge bg-primary">Score: {{ '%.2f' % frame.score }}</span>
-                <a href="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}" 
-                   class="btn btn-sm btn-outline-secondary" 
-                   download>
-                  Download
-                </a>
-              </div>
-              <small class="text-muted">{{ frame.frame_path.split('/')[-1] }}</small>
+        <div class="list-group-item d-flex align-items-center">
+          <img src="{{ url_for('static', filename=(frame.frame_path or '').replace('\\','/')) }}" class="rounded me-3" style="width: 100px; height: auto;" alt="Frame">
+          <div class="flex-fill">
+            <div>
+              <strong>Score:</strong> {{ '%.3f'|format(frame.score or 0) }}
             </div>
           </div>
         </div>
       {% endfor %}
     </div>
-    
-    <!-- Pagination -->
-    {% if pagination.total_pages > 1 %}
-    <div class="row mt-4">
-      <div class="col-12">
-        <nav aria-label="Gallery pagination">
-          <ul class="pagination justify-content-center">
-            <!-- Previous page button -->
-            <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-              <a class="page-link" href="{{ url_for('upload.gallery', page=pagination.prev_page, sort=sort_option, min_score=min_score, view=view_option) if pagination.has_prev else '#' }}" aria-label="Previous">
-                <span aria-hidden="true">&laquo;</span>
-              </a>
-            </li>
-            
-            <!-- Page numbers -->
-            {% for page_num in range(1, pagination.total_pages + 1) %}
-              {% if page_num == 1 or page_num == pagination.total_pages or (page_num >= pagination.page - 2 and page_num <= pagination.page + 2) %}
-                <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('upload.gallery', page=page_num, sort=sort_option, min_score=min_score, view=view_option) }}">
-                    {{ page_num }}
-                  </a>
-                </li>
-              {% elif page_num == pagination.page - 3 or page_num == pagination.page + 3 %}
-                <li class="page-item disabled">
-                  <a class="page-link" href="#">...</a>
-                </li>
-              {% endif %}
-            {% endfor %}
-            
-            <!-- Next page button -->
-            <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-              <a class="page-link" href="{{ url_for('upload.gallery', page=pagination.next_page, sort=sort_option, min_score=min_score, view=view_option) if pagination.has_next else '#' }}" aria-label="Next">
-                <span aria-hidden="true">&raquo;</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    </div>
-    {% endif %}
   {% else %}
-    <div class="alert alert-info">
-      <h4 class="alert-heading">No surf photos yet!</h4>
-      <p>We haven't captured any surfing moments for you yet. Upload a surf video to get started.</p>
-      <hr>
-      <p class="mb-0">
-        <a href="{{ url_for('upload.video_upload') }}" class="btn btn-primary">Upload Surf Video</a>
-      </p>
+    <div class="row g-2 mb-3">
+      {% for frame in frames %}
+        <div class="col-6 col-md-3 col-lg-2">
+          <div class="card">
+            <img class="card-img-top" src="{{ url_for('static', filename=(frame.frame_path or '').replace('\\','/')) }}" alt="Frame">
+            <div class="card-body p-2">
+              <small class="text-muted">{{ '%.2f'|format(frame.score or 0) }}</small>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
     </div>
   {% endif %}
-</div>
+
+  {% if pagination and (pagination.has_prev or pagination.has_next) %}
+    <nav aria-label="Gallery pagination">
+      <ul class="pagination">
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for('upload.gallery', page=pagination.prev_page, per_page=pagination.per_page, sort=sort_option, min_score=min_score, view=view_option, date_range=date_range) }}">Previous</a>
+        </li>
+        <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.total_pages }}</span></li>
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+          <a class="page-link" href="{{ url_for('upload.gallery', page=pagination.next_page, per_page=pagination.per_page, sort=sort_option, min_score=min_score, view=view_option, date_range=date_range) }}">Next</a>
+        </li>
+      </ul>
+    </nav>
+  {% endif %}
+{% else %}
+  <div class="alert alert-info">No photos found for the selected filters.</div>
+{% endif %}
 {% endblock %}

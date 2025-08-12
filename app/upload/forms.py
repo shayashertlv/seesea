@@ -23,14 +23,6 @@ class UploadForm(FlaskForm):
         description="An optional side profile photo can improve recognition accuracy."
     )
     
-    board_image = FileField(
-        "Surfboard Image",
-        validators=[
-            FileRequired(message="Please upload a photo of your surfboard"),
-            FileAllowed(['jpg', 'png', 'jpeg'], 'Images only (JPG, PNG, JPEG)!')
-        ],
-        description="Upload a clear photo of your surfboard. Include any distinctive features, colors, or patterns."
-    )
     
     wetsuit_description = TextAreaField(
         "Wetsuit Description (Optional)",

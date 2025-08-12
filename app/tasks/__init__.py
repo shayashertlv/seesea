@@ -1,17 +1,8 @@
-# app/__init__.py
+"""Tasks package
 
-from flask import Flask
-from app.config import Config
+This package contains Celery task modules and helper functions used by the
+background processing pipeline (detection, embedding, matching, and video processing).
 
-def create_app():
-    app = Flask(__name__)
-    app.config.from_object(Config)
-
-    # Register blueprints here when ready
-    from app.auth import auth_bp
-    from app.upload import upload_bp
-
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(upload_bp)
-
-    return app
+Modules are discovered by celery_worker.py via its include= list. There is no Flask app
+definition here by design.
+"""

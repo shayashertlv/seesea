@@ -10,10 +10,10 @@ from werkzeug.utils import secure_filename
 from app.upload import upload_bp
 from app.upload.forms import UploadForm
 from app.upload.video_forms import VideoUploadForm
-from app.tasks.embed import generate_face_embedding, generate_board_embedding
-from celery_worker import process_video_task
+from app.tasks.embed import generate_face_embedding
+from celery_worker import enqueue_process_video
 from app.database import SessionLocal
-from app.models import UserProfile, SurferFrame, SurfVideo
+from app.models import UserProfile, SurferFrame, SurfVideo, UserEmbedding
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,36 +23,16 @@ load_dotenv()
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "app/static/uploads")
 
 def validate_face_image(image_path):
-    """
-    Basic validation to check if an image contains a face.
-    For POC, we'll use a simple check using OpenCV's face detector.
-    
-    Args:
-        image_path: Path to the image file
-        
-    Returns:
-        True if a face is detected, False otherwise
+    """Validate face presence using the same pipeline as embed.py.
+    Returns True if a valid face embedding can be computed, False otherwise.
     """
     try:
-        # Load the image
-        img = cv2.imread(image_path)
-        if img is None:
-            return False
-            
-        # Convert to grayscale for face detection
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        # Load a pre-trained face detector
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        
-        # Detect faces
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-        
-        # Return True if at least one face is detected
-        return len(faces) > 0
-        
+        from app.tasks.embed import _compute_face_embedding_from_path
+        result = _compute_face_embedding_from_path(image_path)
+        emb = result[0] if isinstance(result, (tuple, list)) else result
+        return emb is not None
     except Exception as e:
-        print(f"Error validating face image: {str(e)}")
+        print(f"[routes.upload] Error validating face image with embed pipeline: {str(e)}")
         return False
 
 @upload_bp.route("/", methods=["GET", "POST"])
@@ -62,7 +42,6 @@ def upload_page():
     if form.validate_on_submit():
         # Get form data
         face_file = form.face_image.data
-        board_file = form.board_image.data
         face_side_file = form.face_image_side.data if form.face_image_side.data else None
         wetsuit_description = form.wetsuit_description.data
         
@@ -72,22 +51,18 @@ def upload_page():
         # Generate unique filenames with timestamp to avoid overwriting
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         face_filename = secure_filename(f"{current_user.username}_face_{timestamp}.jpg")
-        board_filename = secure_filename(f"{current_user.username}_board_{timestamp}.jpg")
         face_side_filename = None
         
         # Save the files (full paths for file operations)
         face_path = os.path.join(UPLOAD_FOLDER, face_filename)
-        board_path = os.path.join(UPLOAD_FOLDER, board_filename)
         face_side_path = None
         
         # Create relative paths for database storage (without app/static/ prefix)
         uploads_dir_relative = "uploads"
         face_path_relative = os.path.join(uploads_dir_relative, face_filename)
-        board_path_relative = os.path.join(uploads_dir_relative, board_filename)
         face_side_path_relative = None
         
         face_file.save(face_path)
-        board_file.save(board_path)
         
         # Validate face image
         if not validate_face_image(face_path):
@@ -112,11 +87,32 @@ def upload_page():
                 face_side_filename = None
                 flash("No face detected in the side view image. It will be ignored.", "warning")
         
-        # Generate embeddings
-        generate_face_embedding(current_user.id, face_path, "front")
+        # Generate embeddings with error handling
+        ok_front = generate_face_embedding(current_user.id, face_path, "front")
+        if not ok_front:
+            # Clean up files and abort
+            try:
+                if os.path.exists(face_path):
+                    os.remove(face_path)
+                if face_side_path and os.path.exists(face_side_path):
+                    os.remove(face_side_path)
+            except Exception:
+                pass
+            flash("Could not extract a valid face embedding from your front image. Please upload a clearer face photo.", "error")
+            return render_template("upload.html", form=form)
+
+        ok_side = True
         if face_side_path:
-            generate_face_embedding(current_user.id, face_side_path, "side")
-        generate_board_embedding(current_user.id, board_path)
+            ok_side = generate_face_embedding(current_user.id, face_side_path, "side")
+            if not ok_side:
+                try:
+                    if os.path.exists(face_side_path):
+                        os.remove(face_side_path)
+                except Exception:
+                    pass
+                face_side_path = None
+                face_side_path_relative = None
+                flash("We couldn't extract a valid face from the side image. It will be ignored.", "warning")
         
         # Store in UserProfile
         session = SessionLocal()
@@ -127,7 +123,6 @@ def upload_page():
             if existing_profile:
                 # Update existing profile with relative paths
                 existing_profile.face_image_path = face_path_relative
-                existing_profile.board_image_path = board_path_relative
                 existing_profile.face_side_image_path = face_side_path_relative
                 existing_profile.wetsuit_description = wetsuit_description
             else:
@@ -136,11 +131,19 @@ def upload_page():
                     user_id=current_user.id,
                     face_image_path=face_path_relative,
                     face_side_image_path=face_side_path_relative,
-                    board_image_path=board_path_relative,
                     wetsuit_description=wetsuit_description
                 )
                 session.add(new_profile)
                 
+            # Warn if outfit color embedding wasn't extracted
+            try:
+                has_color = session.query(UserEmbedding).filter_by(user_id=current_user.id, embedding_type="outfit_color").first() is not None
+                if not has_color:
+                    flash("We couldn't reliably extract your outfit/wetsuit color from the photo. Matching will rely more on face features.", "warning")
+            except Exception:
+                # Non-fatal
+                pass
+
             session.commit()
             flash("Reference images uploaded and embeddings generated successfully!", "success")
             
@@ -166,8 +169,26 @@ def profile():
         # Get user profile
         profile = session.query(UserProfile).filter_by(user_id=current_user.id).first()
         
-        # Get user's surf photos
-        frames = session.query(SurferFrame).filter_by(user_id=current_user.id).all()
+        # Get user's surf photos (newest first)
+        if hasattr(SurferFrame, 'created_at'):
+            frames = session.query(SurferFrame).filter_by(user_id=current_user.id).order_by(SurferFrame.created_at.desc()).all()
+        else:
+            frames = session.query(SurferFrame).filter_by(user_id=current_user.id).order_by(SurferFrame.id.desc()).all()
+        
+        # Normalize and filter out frames that no longer exist on disk
+        base_static = os.path.join("app", "static")
+        clean_frames = []
+        for f in frames:
+            p = (f.frame_path or "").replace("\\", "/")
+            if p.startswith("app/static/"):
+                p = p[len("app/static/"):]
+            elif p.startswith("static/"):
+                p = p[len("static/"):]
+            disk_path = os.path.join(base_static, p)
+            if os.path.exists(disk_path):
+                f.frame_path = p
+                clean_frames.append(f)
+        frames = clean_frames
         
         return render_template("profile.html", profile=profile, frames=frames)
         
@@ -199,28 +220,31 @@ def gallery():
         query = session.query(SurferFrame).filter_by(user_id=current_user.id).filter(SurferFrame.score >= min_score)
         
         # Apply date range filter if SurferFrame has created_at field
-        # Note: For the POC, we're using ID as a proxy for creation date
-        # In a real implementation, we would filter by created_at
         if hasattr(SurferFrame, 'created_at'):
             from datetime import datetime, timedelta
-            today = datetime.now().date()
-            
+            now = datetime.now()
+
             if date_range == 'today':
-                query = query.filter(SurferFrame.created_at >= today)
+                start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                query = query.filter(SurferFrame.created_at >= start)
             elif date_range == 'week':
-                week_ago = today - timedelta(days=7)
-                query = query.filter(SurferFrame.created_at >= week_ago)
+                start = now - timedelta(days=7)
+                query = query.filter(SurferFrame.created_at >= start)
             elif date_range == 'month':
-                month_ago = today - timedelta(days=30)
-                query = query.filter(SurferFrame.created_at >= month_ago)
+                start = now - timedelta(days=30)
+                query = query.filter(SurferFrame.created_at >= start)
         
         # Apply sorting
         if sort_option == 'date_asc':
-            # In a real implementation, we would sort by created_at
-            # For now, we'll sort by ID as a proxy for creation date
-            query = query.order_by(SurferFrame.id.asc())
+            if hasattr(SurferFrame, 'created_at'):
+                query = query.order_by(SurferFrame.created_at.asc())
+            else:
+                query = query.order_by(SurferFrame.id.asc())
         elif sort_option == 'date_desc':
-            query = query.order_by(SurferFrame.id.desc())
+            if hasattr(SurferFrame, 'created_at'):
+                query = query.order_by(SurferFrame.created_at.desc())
+            else:
+                query = query.order_by(SurferFrame.id.desc())
         elif sort_option == 'score_asc':
             query = query.order_by(SurferFrame.score.asc())
         elif sort_option == 'score_desc':
@@ -236,11 +260,20 @@ def gallery():
         # Get frames for current page
         frames = query.limit(per_page).offset(offset).all()
         
-        # Process frame paths to ensure they work correctly with url_for('static', ...)
+        # Process frame paths and filter out missing files to avoid 404s
+        base_static = os.path.join("app", "static")
+        clean_frames = []
         for frame in frames:
-            # If the path starts with "app/static/", remove that prefix
-            if frame.frame_path.startswith("app/static/"):
-                frame.frame_path = frame.frame_path[len("app/static/"):]
+            p = (frame.frame_path or "").replace("\\", "/")
+            if p.startswith("app/static/"):
+                p = p[len("app/static/"):]
+            elif p.startswith("static/"):
+                p = p[len("static/"):]
+            disk_path = os.path.join(base_static, p)
+            if os.path.exists(disk_path):
+                frame.frame_path = p
+                clean_frames.append(frame)
+        frames = clean_frames
         
         # Create pagination metadata
         pagination = {
@@ -357,10 +390,24 @@ def video_upload():
                 # Get the video ID for redirect
                 video_id = new_video.id
                 
-                # Queue the video processing task in Celery
-                process_video_task.delay(video_id)
-                
-                flash("Video uploaded successfully! Processing has started automatically.", "success")
+                # Normalize stored paths to forward slashes for consistency across OS/container
+                if new_video.video_path:
+                    new_video.video_path = str(new_video.video_path).replace("\\", "/")
+                if new_video.thumbnail_path:
+                    new_video.thumbnail_path = str(new_video.thumbnail_path).replace("\\", "/")
+                try:
+                    # Queue the video processing task in Celery
+                    async_res = enqueue_process_video(video_id)
+                    current_app.logger.info(
+                        "[enqueue] Sent process_video(video_id=%s) task_id=%s to broker=%s",
+                        video_id,
+                        getattr(async_res, "id", None),
+                        os.getenv("CELERY_BROKER_URL")
+                    )
+                    flash("Video uploaded successfully! Processing has started automatically.", "success")
+                except Exception as e:
+                    current_app.logger.exception("[enqueue] Failed to dispatch process_video(video_id=%s)", video_id)
+                    flash(f"Video uploaded, but failed to start processing automatically. You can press 'Process' on the video page. Error: {e}", "error")
                 return redirect(url_for("upload.video_status", video_id=video_id))
                 
             except Exception as e:
@@ -406,20 +453,30 @@ def video_status(video_id):
             flash("Video not found or you don't have permission to view it.", "error")
             return redirect(url_for("upload.video_upload"))
             
-        # Process thumbnail path if it exists
-        if video.thumbnail_path and video.thumbnail_path.startswith("app/static/"):
-            video.thumbnail_path = video.thumbnail_path[len("app/static/"):]
+        # Process thumbnail path if it exists (normalize slashes and strip static prefix)
+        if video.thumbnail_path:
+            pthumb = str(video.thumbnail_path).replace("\\", "/")
+            if pthumb.startswith("app/static/"):
+                pthumb = pthumb[len("app/static/"):]
+            elif pthumb.startswith("static/"):
+                pthumb = pthumb[len("static/"):]
+            video.thumbnail_path = pthumb
             
         # Get frames from this video that have been matched to the current user
-        frames = session.query(SurferFrame).filter_by(user_id=current_user.id).all()
-        # In a real implementation, we would filter frames by video_id
-        # This would require adding a video_id field to the SurferFrame model
+        # Prefer filtering by video_id (requires DB column 'video_id'). Fallback to user-only if unavailable.
+        try:
+            frames = session.query(SurferFrame).filter_by(user_id=current_user.id, video_id=video_id).all()
+        except Exception:
+            frames = session.query(SurferFrame).filter_by(user_id=current_user.id).all()
         
         # Process frame paths to ensure they work correctly with url_for('static', ...)
         for frame in frames:
-            # If the path starts with "app/static/", remove that prefix
-            if frame.frame_path.startswith("app/static/"):
-                frame.frame_path = frame.frame_path[len("app/static/"):]
+            p = (frame.frame_path or "").replace("\\", "/")
+            if p.startswith("app/static/"):
+                p = p[len("app/static/"):]
+            elif p.startswith("static/"):
+                p = p[len("static/"):]
+            frame.frame_path = p
         
         return render_template("video_status.html", video=video, frames=frames)
         
@@ -533,7 +590,7 @@ def process_video_route(video_id):
             return redirect(url_for("upload.video_status", video_id=video_id))
             
         # Queue the video processing task in Celery
-        process_video_task.delay(video_id)
+        enqueue_process_video(video_id)
         
         flash("Video processing has started. This may take several minutes.", "success")
         return redirect(url_for("upload.video_status", video_id=video_id))

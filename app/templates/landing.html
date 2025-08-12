@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <h2>Welcome to SeeSea</h2>
+  <p class="lead">AI-powered surf photo finder. Upload a selfie and videos, and we’ll find your best surfing moments.</p>
+  <div class="actions">
+    <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Login</a>
+    <a href="{{ url_for('auth.register') }}" class="btn btn-secondary">Register</a>
+    <a href="{{ url_for('upload.upload_page') }}" class="btn btn-success">Upload Reference Images</a>
+    <a href="{{ url_for('upload.gallery') }}" class="btn btn-info">View Gallery</a>
+  </div>
+</div>
+{% endblock %}

@@ -12,7 +12,7 @@
         <div class="card-body">
           {% if video.thumbnail_path %}
           <div class="text-center mb-4">
-            <img src="{{ url_for('static', filename=video.thumbnail_path.replace('\\', '/')) }}" class="img-fluid rounded" alt="Video Thumbnail" style="max-height: 200px;">
+            <img src="{{ url_for('static', filename=(video.thumbnail_path | replace('\\','/')) ) }}" class="img-fluid rounded" alt="Video Thumbnail" style="max-height: 200px;">
           </div>
           {% endif %}
           
@@ -93,7 +93,7 @@
           <div class="row">
             {% for frame in frames[:6] %}
               <div class="col-6 p-1">
-                <img src="{{ url_for('static', filename=frame.frame_path.replace('\\', '/')) }}" class="img-fluid rounded" alt="Matched Photo">
+                <img src="{{ url_for('static', filename=(frame.frame_path | replace('\\','/')) ) }}" class="img-fluid rounded" alt="Matched Photo">
               </div>
             {% endfor %}
           </div>

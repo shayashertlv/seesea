@@ -5,6 +5,7 @@ from datetime import datetime
 from app.database import SessionLocal
 from app.models import SurferFrame
 from dotenv import load_dotenv
+from celery import shared_task
 
 # Load environment variables
 load_dotenv()
@@ -88,6 +89,11 @@ def detect_and_capture():
     session.commit()
     cap.release()
     print(f"[✅] Done. Processed {frame_count} frames. Saved {saved_count} images.")
+
+# Celery task wrapper to expose detect_and_capture via Celery without changing sync API
+@shared_task(name="detect_and_capture")
+def _task_detect_and_capture():
+    return detect_and_capture()
 
 if __name__ == "__main__":
     detect_and_capture()

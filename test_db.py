@@ -36,7 +36,7 @@ def create_test_data():
             print(f"Test user already exists with ID: {test_user.id}")
         
         # Create test embeddings with different types
-        embedding_types = ["face_front", "face_side", "board"]
+        embedding_types = ["face_front", "face_side"]
         
         for emb_type in embedding_types:
             # Check if embedding of this type already exists
@@ -50,7 +50,7 @@ def create_test_data():
                 fake_embedding = np.random.rand(512).tolist()
                 
                 # Add a bias based on embedding type
-                bias = 0.1 if emb_type == "face_front" else 0.2 if emb_type == "face_side" else 0.3
+                bias = 0.1 if emb_type == "face_front" else 0.2
                 for i in range(len(fake_embedding)):
                     fake_embedding[i] = (fake_embedding[i] + bias) % 1.0
                 
@@ -80,7 +80,6 @@ def create_test_data():
                 user_id=test_user.id,
                 face_image_path="uploads/test_face.jpg",
                 face_side_image_path="uploads/test_face_side.jpg",
-                board_image_path="uploads/test_board.jpg",
                 wetsuit_description="Blue wetsuit with white stripes"
             )
             session.add(test_profile)
@@ -153,7 +152,7 @@ def test_queries():
             return
         
         # Test query for embeddings by type
-        for emb_type in ["face_front", "face_side", "board"]:
+        for emb_type in ["face_front", "face_side"]:
             embeddings = session.query(UserEmbedding).filter_by(
                 user_id=test_user.id,
                 embedding_type=emb_type
@@ -172,7 +171,6 @@ def test_queries():
         if profile:
             print(f"Found profile for user {test_user.id}")
             print(f"  Face image: {profile.face_image_path}")
-            print(f"  Board image: {profile.board_image_path}")
         else:
             print(f"No profile found for user {test_user.id}")
         

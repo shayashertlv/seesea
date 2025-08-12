@@ -7,8 +7,34 @@ services:
       POSTGRES_DB: seesea
     ports:
       - "5433:5432"
+    restart: unless-stopped
 
   redis:
     image: redis:alpine
     ports:
       - "6380:6379"
+    restart: unless-stopped
+
+  celery-worker:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      # Celery broker/result backend inside Docker network
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # SQLAlchemy database URL for Postgres inside Docker network
+      DATABASE_URL: postgresql+psycopg2://seesea:seesea@postgres:5432/seesea
+      # Optional: better logs
+      PYTHONUNBUFFERED: "1"
+      PIP_PREFER_BINARY: "1"
+      # Timezone to keep clocks in sync and avoid drift warnings
+      TZ: UTC
+      CELERY_TIMEZONE: UTC
+    depends_on:
+      - redis
+      - postgres
+    command: >-
+      sh -c "apt-get update && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 build-essential python3-dev cmake libopenblas-dev && rm -rf /var/lib/apt/lists/* && pip install --upgrade pip setuptools wheel && pip install --no-cache-dir cython && pip install --no-cache-dir -r requirements.txt && python create_db.py && celery -A celery_worker:celery worker --loglevel=info --without-mingle --without-gossip"
+    restart: unless-stopped

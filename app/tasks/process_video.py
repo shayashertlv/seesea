@@ -3,21 +3,18 @@
 import os
 import cv2
 import time
-from celery import Celery
+from celery import shared_task
 from app.database import SessionLocal
 from app.models import SurfVideo, SurferFrame
 from app.tasks.detect import detect_and_capture
-from app.tasks.match import match_surfer_to_users
+from app.tasks.match import match_surfer_to_users, _resolve_image_path
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Initialize Celery
-BROKER_URL = os.getenv("CELERY_BROKER_URL", os.getenv("BROKER_URL"))
-celery = Celery("process_video", broker=BROKER_URL)
 
-@celery.task(name="process_video")
+@shared_task(name="process_video")
 def process_video(video_id):
     """
     Process a video by detecting surfers and matching them to users.
@@ -31,6 +28,7 @@ def process_video(video_id):
     session = SessionLocal()
     
     try:
+        print(f"[task] process_video started for video_id={video_id}")
         # Get the video
         video = session.query(SurfVideo).filter_by(id=video_id).first()
         if not video:
@@ -39,14 +37,30 @@ def process_video(video_id):
             
         # Update status to processing
         video.status = "processing"
-        session.commit()
-        
-        # Open the video
-        cap = cv2.VideoCapture(video.video_path)
-        if not cap.isOpened():
-            print(f"Could not open video at {video.video_path}")
-            video.status = "failed"
+        try:
             session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Failed to set video {video_id} to processing: {e}")
+            try:
+                video.status = "failed"
+                session.commit()
+            except Exception as e2:
+                session.rollback()
+                print(f"Also failed to mark video {video_id} failed: {e2}")
+            return False
+        
+        # Open the video (resolve relative path under app/static if needed)
+        video_path_resolved = _resolve_image_path(video.video_path)
+        cap = cv2.VideoCapture(video_path_resolved)
+        if not cap.isOpened():
+            print(f"Could not open video at {video_path_resolved}")
+            video.status = "failed"
+            try:
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                print(f"Failed to mark video {video_id} as failed after open error: {e}")
             return False
             
         # Get video properties
@@ -120,12 +134,18 @@ def process_video(video_id):
                     x2=x2,
                     y2=y2,
                     score=conf,
+                    video_id=video.id,
                 )
                 session.add(new_frame)
                 frame_detections += 1
                 
             # Commit all detections for this frame
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                print(f"Commit failed after adding detections for frame {frame_idx}: {e}")
+                continue
             detected_frames += frame_detections
             
             # Print progress
@@ -136,7 +156,11 @@ def process_video(video_id):
             processed_frames += 1
             if processed_frames % 5 == 0:
                 video.processed_frames = processed_frames
-                session.commit()
+                try:
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    print(f"Failed to commit progress for video {video_id} at frame {frame_idx}: {e}")
                 
             # Simulate processing time
             time.sleep(0.1)
@@ -159,22 +183,38 @@ def process_video(video_id):
             # Update status to completed
             video.status = "completed"
             video.processed_frames = processed_frames
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                print(f"Failed to mark video {video_id} as completed: {e}")
             
         except Exception as e:
             print(f"Error during matching process: {str(e)}")
             video.status = "completed_with_errors"
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e2:
+                session.rollback()
+                print(f"Failed to mark video {video_id} as completed_with_errors: {e2}")
         
         print(f"Video processing completed: {processed_frames} frames processed, {detected_frames} surfers detected")
         return True
         
     except Exception as e:
         print(f"Error processing video {video_id}: {str(e)}")
-        # Update status to failed
+        # Reset transaction and update status to failed
+        try:
+            session.rollback()
+        except Exception:
+            pass
         if 'video' in locals():
             video.status = "failed"
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e2:
+                session.rollback()
+                print(f"Also failed to mark video {video_id} as failed in outer except: {e2}")
         return False
         
     finally:
